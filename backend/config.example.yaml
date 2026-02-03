@@ -1,0 +1,30 @@
+app:
+  name: "Video Insight"
+  version: "1.0.0"
+  output_dir: "~/Documents/VideoInsight"
+
+whisper:
+  model_size: "base"  # tiny, base, small, medium, large
+  language: "zh"
+  device: "cpu"
+
+minimax:
+  api_key: ""  # 从环境变量或用户输入获取
+  model: "abab6.5s-chat"
+  max_tokens: 4096
+
+templates:
+  - name: "学习笔记"
+    prompt: "请将以下视频内容整理成学习笔记格式，包含：1. 核心概念 2. 关键要点 3. 实践建议"
+  - name: "要点提取"
+    prompt: "请提取视频的核心要点，以简洁的列表形式呈现"
+  - name: "详细记录"
+    prompt: "请详细记录视频内容，保留所有重要信息和细节"
+  - name: "问答格式"
+    prompt: "请将视频内容整理成问答格式，提取关键问题和答案"
+  - name: "思维导图"
+    prompt: "请将视频内容整理成思维导图结构，使用 Markdown 格式"
+
+downloader:
+  timeout: 300  # 下载超时时间（秒）
+  max_retries: 3  # 最大重试次数
