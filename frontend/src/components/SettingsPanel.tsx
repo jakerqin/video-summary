@@ -10,7 +10,6 @@ export function SettingsPanel() {
 
   const handleSaveApiKey = async () => {
     updateSettings({ minimaxApiKey: settings.minimaxApiKey })
-    // 保存到主进程（可选：通过 IPC 存储到安全位置）
   }
 
   const handleEditTemplate = (templateId: string, currentPrompt: string) => {
@@ -27,6 +26,17 @@ export function SettingsPanel() {
       })
       setEditingTemplate(null)
       setEditingPrompt('')
+    }
+  }
+
+  const handleSelectDirectory = async () => {
+    try {
+      const result = await ipcService.openDirectory('')
+      if (result.filePaths && result.filePaths[0]) {
+        updateSettings({ outputDirectory: result.filePaths[0] })
+      }
+    } catch (error) {
+      console.error('Failed to open directory:', error)
     }
   }
 
@@ -96,24 +106,20 @@ export function SettingsPanel() {
             Markdown 保存目录
           </label>
           <div className="flex space-x-3">
-            <input
-              type="text"
-              value={settings.outputDirectory}
-              onChange={(e) =>
-                updateSettings({ outputDirectory: e.target.value })
-              }
-              placeholder="~/Documents/VideoInsight"
-              className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-200 focus:border-blue-500"
-            />
+            <div className="flex-1 relative">
+              <input
+                type="text"
+                value={settings.outputDirectory}
+                onChange={(e) =>
+                  updateSettings({ outputDirectory: e.target.value })
+                }
+                placeholder="~/Documents/VideoInsight"
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-200 focus:border-blue-500"
+                readOnly
+              />
+            </div>
             <button
-              onClick={() => {
-                // 打开目录选择对话框
-                ipcService.invoke('dialog:openDirectory').then((result) => {
-                  if (result.filePaths?.[0]) {
-                    updateSettings({ outputDirectory: result.filePaths[0] })
-                  }
-                })
-              }}
+              onClick={handleSelectDirectory}
               className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition-colors"
             >
               浏览
