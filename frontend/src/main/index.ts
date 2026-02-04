@@ -1,7 +1,9 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, ipcMain } from 'electron'
 import path from 'path'
+import { PythonManager } from './python-manager'
 
 let mainWindow: BrowserWindow | null = null
+const pythonManager = new PythonManager()
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -28,8 +30,34 @@ function createWindow() {
   })
 }
 
-app.whenReady().then(() => {
+// IPC 处理器
+ipcMain.handle('backend:status', async () => {
+  return { running: pythonManager.isRunning() }
+})
+
+ipcMain.handle('backend:start', async () => {
+  try {
+    await pythonManager.start()
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: (error as Error).message }
+  }
+})
+
+ipcMain.handle('backend:stop', async () => {
+  await pythonManager.stop()
+  return { success: true }
+})
+
+app.whenReady().then(async () => {
   createWindow()
+
+  // 自动启动 Python 后端
+  try {
+    await pythonManager.start()
+  } catch (error) {
+    console.error('Failed to start Python backend:', error)
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -39,7 +67,12 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+  pythonManager.stop()
   if (process.platform !== 'darwin') {
     app.quit()
   }
+})
+
+app.on('before-quit', async () => {
+  await pythonManager.stop()
 })
