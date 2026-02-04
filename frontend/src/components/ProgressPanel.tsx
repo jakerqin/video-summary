@@ -2,23 +2,24 @@ import { useQueueStore } from '../stores/queue'
 import { useSettingsStore } from '../stores/settings'
 import { useEffect, useState } from 'react'
 import { wsService } from '../services/websocket'
-import { ipcService } from '../services/ipc'
+import { ExportPanel } from './ExportPanel'
 
-interface ProgressPanelProps {
-  onComplete?: (outputPath: string) => void
-}
-
-export function ProgressPanel({ onComplete }: ProgressPanelProps) {
+export function ProgressPanel() {
   const { tasks, updateTask } = useQueueStore()
   const { settings } = useSettingsStore()
   const [isProcessing, setIsProcessing] = useState(false)
   const [logs, setLogs] = useState<string[]>([])
+  const [completedTask, setCompletedTask] = useState<{ id: string; outputPath: string } | null>(null)
 
   // 获取进行中的任务
   const pendingTasks = tasks.filter((t) => t.status === 'pending')
   const processingTasks = tasks.filter((t) =>
     ['downloading', 'processing'].includes(t.status)
   )
+  const recentCompleted = tasks
+    .filter((t) => t.status === 'completed')
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 1)
 
   // 监听 WebSocket 消息
   useEffect(() => {
@@ -28,36 +29,34 @@ export function ProgressPanel({ onComplete }: ProgressPanelProps) {
           status: data.status || 'processing',
           progress: data.progress || 0,
           message: data.message || '',
+          outputPath: data.outputPath,
         })
+
+        // 记录完成的任务
+        if (data.status === 'completed' && data.outputPath) {
+          setCompletedTask({ id: data.taskId, outputPath: data.outputPath })
+          setIsProcessing(false)
+        }
+
+        if (data.status === 'failed') {
+          setIsProcessing(false)
+        }
       }
 
       // 记录日志
       if (data.message) {
-        setLogs((prev) => [
-          ...prev.slice(-50),
-          `[${new Date().toLocaleTimeString()}] ${data.message}`,
-        ])
-      }
-
-      // 任务完成
-      if (data.status === 'completed' && data.outputPath) {
-        setIsProcessing(false)
-        onComplete?.(data.outputPath)
+        setLogs((prev) => [...prev.slice(-100), data.message])
       }
     }
 
     wsService.on('progress', handleProgress)
     wsService.on('task_update', handleProgress)
-    wsService.on('log', (data) => {
-      setLogs((prev) => [...prev.slice(-50), data.message])
-    })
 
     return () => {
       wsService.off('progress', handleProgress)
       wsService.off('task_update', handleProgress)
-      wsService.off('log', handleProgress)
     }
-  }, [updateTask, onComplete])
+  }, [updateTask])
 
   const handleStartProcessing = async () => {
     if (!settings.minimaxApiKey) {
@@ -74,8 +73,9 @@ export function ProgressPanel({ onComplete }: ProgressPanelProps) {
     }
 
     setIsProcessing(true)
+    setCompletedTask(null)
 
-    // 通过 WebSocket 发送开始处理命令
+    // 发送开始处理命令
     wsService.send({
       type: 'start_processing',
       tasks: activeTasks.map((t) => ({
@@ -83,6 +83,7 @@ export function ProgressPanel({ onComplete }: ProgressPanelProps) {
         type: t.type,
         source: t.source,
         templateId: settings.templates[0]?.id,
+        templatePrompt: settings.templates.find((tm) => tm.id === settings.templates[0]?.id)?.prompt || '',
       })),
     })
   }
@@ -101,9 +102,10 @@ export function ProgressPanel({ onComplete }: ProgressPanelProps) {
       {pendingTasks.length > 0 && !isProcessing && (
         <button
           onClick={handleStartProcessing}
-          className="w-full py-4 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-xl transition-colors"
+          className="w-full py-4 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-xl transition-colors flex items-center justify-center space-x-2"
         >
-          开始处理 ({pendingTasks.length} 个待处理)
+          <span>🚀</span>
+          <span>开始处理 ({pendingTasks.length} 个待处理)</span>
         </button>
       )}
 
@@ -143,6 +145,19 @@ export function ProgressPanel({ onComplete }: ProgressPanelProps) {
         </div>
       )}
 
+      {/* 最近完成的任务 */}
+      {recentCompleted.length > 0 && (
+        <div className="bg-green-50 rounded-xl p-4">
+          <div className="flex items-center space-x-2 mb-2">
+            <span>✅</span>
+            <span className="font-medium text-green-800">已完成</span>
+          </div>
+          <p className="text-sm text-green-700 truncate">
+            {recentCompleted[0].title || recentCompleted[0].filename}
+          </p>
+        </div>
+      )}
+
       {/* 日志面板 */}
       {logs.length > 0 && (
         <div className="bg-gray-900 rounded-xl p-4">
@@ -161,6 +176,14 @@ export function ProgressPanel({ onComplete }: ProgressPanelProps) {
             ))}
           </div>
         </div>
+      )}
+
+      {/* 完成通知 */}
+      {completedTask && (
+        <ExportPanel
+          outputPath={completedTask.outputPath}
+          onClose={() => setCompletedTask(null)}
+        />
       )}
     </div>
   )

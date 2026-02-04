@@ -3,6 +3,27 @@ export interface ElectronAPI {
   send: (channel: string, data: any) => void
   on: (channel: string, callback: (data: any) => void) => void
   invoke: (channel: string, data?: any) => Promise<any>
+
+  // Shell 操作
+  shell: {
+    openPath: (path: string) => Promise<{ success: boolean; error?: string }>
+    openExternal: (url: string) => Promise<string>
+    showItemInFolder: (path: string) => Promise<{ success: boolean; error?: string }>
+  }
+
+  // 文件系统
+  fs: {
+    readFile: (path: string, encoding?: string) => Promise<{ success: boolean; content?: string; error?: string }>
+    writeFile: (path: string, content: string, encoding?: string) => Promise<{ success: boolean; error?: string }>
+  }
+
+  // 对话框
+  dialog: {
+    openDirectory: (options?: any) => Promise<{ canceled: boolean; filePaths?: string[] }>
+    openFile: (options?: any) => Promise<{ canceled: boolean; filePaths?: string[] }>
+    saveFile: (options?: any) => Promise<{ canceled: boolean; filePath?: string }>
+    showMessageBox: (options?: any) => Promise<{ response: number; checkboxChecked: boolean }>
+  }
 }
 
 declare global {
@@ -26,6 +47,7 @@ export interface Task {
   message: string
   createdAt: Date
   error?: string
+  outputPath?: string
 }
 
 // WebSocket 消息类型

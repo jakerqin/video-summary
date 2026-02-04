@@ -1,5 +1,6 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
 import path from 'path'
+import fs from 'fs'
 import { PythonManager } from './python-manager'
 
 let mainWindow: BrowserWindow | null = null
@@ -30,7 +31,8 @@ function createWindow() {
   })
 }
 
-// IPC 处理器
+// ============ 基础 IPC 处理器 ============
+
 ipcMain.handle('backend:status', async () => {
   return { running: pythonManager.isRunning() }
 })
@@ -47,6 +49,115 @@ ipcMain.handle('backend:start', async () => {
 ipcMain.handle('backend:stop', async () => {
   await pythonManager.stop()
   return { success: true }
+})
+
+// ============ Shell IPC 处理器 ============
+
+ipcMain.handle('shell:openPath', async (_, filePath: string) => {
+  try {
+    await shell.openPath(filePath)
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: (error as Error).message }
+  }
+})
+
+ipcMain.handle('shell:openDirectory', async (_, dirPath: string) => {
+  try {
+    const result = await dialog.showOpenDialog({
+      properties: ['openDirectory'],
+      defaultPath: dirPath,
+    })
+    return {
+      success: true,
+      filePaths: result.filePaths,
+    }
+  } catch (error) {
+    return { success: false, error: (error as Error).message }
+  }
+})
+
+ipcMain.handle('shell:showItemInFolder', async (_, filePath: string) => {
+  try {
+    shell.showItemInFolder(filePath)
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: (error as Error).message }
+  }
+})
+
+// ============ 文件系统 IPC 处理器 ============
+
+ipcMain.handle('fs:readFile', async (_, filePath: string, encoding: string = 'utf-8') => {
+  try {
+    const content = await fs.promises.readFile(filePath, encoding as BufferEncoding)
+    return { success: true, content }
+  } catch (error) {
+    return { success: false, error: (error as Error).message }
+  }
+})
+
+ipcMain.handle('fs:writeFile', async (_, filePath: string, content: string, encoding: string = 'utf-8') => {
+  try {
+    await fs.promises.writeFile(filePath, content, encoding as BufferEncoding)
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: (error as Error).message }
+  }
+})
+
+// ============ 对话框 IPC 处理器 ============
+
+ipcMain.handle('dialog:openDirectory', async (_, options?: any) => {
+  try {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      properties: ['openDirectory'],
+      ...options,
+    })
+    return result
+  } catch (error) {
+    return { canceled: true, filePaths: [] }
+  }
+})
+
+ipcMain.handle('dialog:openFile', async (_, options?: any) => {
+  try {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      properties: ['openFile'],
+      filters: [
+        { name: 'Video Files', extensions: ['mp4', 'mov', 'avi', 'mkv'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+      ...options,
+    })
+    return result
+  } catch (error) {
+    return { canceled: true, filePaths: [] }
+  }
+})
+
+ipcMain.handle('dialog:saveFile', async (_, options?: any) => {
+  try {
+    const result = await dialog.showSaveDialog(mainWindow!, {
+      filters: [
+        { name: 'Markdown', extensions: ['md'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+      ...options,
+    })
+    return result
+  } catch (error) {
+    return { canceled: true, filePath: '' }
+  }
+})
+
+ipcMain.handle('dialog:showMessageBox', async (_, options?: any) => {
+  try {
+    const result = await dialog.showMessageBox(mainWindow!, options)
+    return result
+  } catch (error) {
+    return { response: 0, checkboxChecked: false }
+  }
 })
 
 app.whenReady().then(async () => {
