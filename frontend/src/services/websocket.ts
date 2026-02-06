@@ -3,7 +3,7 @@ class WebSocketService {
   private reconnectTimer: NodeJS.Timeout | null = null
   private listeners: Map<string, Set<(data: any) => void>> = new Map()
 
-  connect(url: string = 'ws://localhost:8000/ws') {
+  connect(url: string = 'ws://localhost:9000/ws') {
     if (this.ws?.readyState === WebSocket.OPEN) {
       return
     }

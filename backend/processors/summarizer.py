@@ -12,13 +12,25 @@ class Summarizer:
 
     def __init__(self):
         self._api_key: Optional[str] = None
-        self._base_url = "https://api.minimax.chat/v1"
+        self._base_url: Optional[str] = None
+        self._model: Optional[str] = None
+
+    def _get_config(self):
+        """获取配置"""
+        config = config_manager.get()
+
+        if not self._api_key:
+            self._api_key = config.minimax.api_key
+
+        if not self._base_url:
+            self._base_url = config.minimax.base_url
+
+        if not self._model:
+            self._model = config.minimax.model
 
     def _get_api_key(self) -> str:
         """获取 API Key"""
-        if not self._api_key:
-            config = config_manager.get()
-            self._api_key = config.minimax.api_key
+        self._get_config()
 
         if not self._api_key:
             raise ValueError("MiniMax API key not configured")
@@ -55,7 +67,7 @@ class Summarizer:
 
 请按照上述要求整理内容。
 """
-
+        logger.info(f"Full prompt: {full_prompt}")
         logger.info("Starting summarization with MiniMax")
 
         if progress_callback:
@@ -71,7 +83,7 @@ class Summarizer:
                         "Content-Type": "application/json",
                     },
                     json={
-                        "model": "abab6.5s-chat",
+                        "model": self._model,
                         "messages": [
                             {
                                 "role": "user",

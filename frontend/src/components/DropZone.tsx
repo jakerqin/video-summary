@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { useQueueStore } from '../stores/queue'
+import { apiService } from '../services/api'
 
 const SUPPORTED_FORMATS = ['mp4', 'mov', 'avi', 'mkv', 'webm', 'flv', 'wmv']
 const MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024 // 2GB
@@ -11,6 +12,7 @@ interface DropZoneProps {
 export function DropZone({ onFilesAdded }: DropZoneProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
   const { addTask, setAddingTask } = useQueueStore()
 
   const validateFiles = useCallback((files: File[]): File[] => {
@@ -55,20 +57,32 @@ export function DropZone({ onFilesAdded }: DropZoneProps) {
       return
     }
 
+    const validFiles = validateFiles(files)
+    if (validFiles.length === 0) return
+
+    setUploading(true)
     setAddingTask(true)
 
-    for (const file of files) {
-      addTask({
-        type: 'file',
-        source: file.path,
-        filename: file.name,
-        title: file.name.replace(/\.[^/.]+$/, ''),
-      })
-    }
+    try {
+      for (const file of validFiles) {
+        // 上传文件到后端
+        const { path } = await apiService.uploadFile(file)
 
-    setAddingTask(false)
-    onFilesAdded?.(files)
-  }, [addTask, setAddingTask, onFilesAdded])
+        addTask({
+          type: 'file',
+          source: path,
+          filename: file.name,
+          title: file.name.replace(/\.[^/.]+$/, ''),
+        })
+      }
+      onFilesAdded?.(validFiles)
+    } catch (err) {
+      setError(`上传失败: ${err instanceof Error ? err.message : '未知错误'}`)
+    } finally {
+      setUploading(false)
+      setAddingTask(false)
+    }
+  }, [addTask, setAddingTask, onFilesAdded, validateFiles])
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -80,7 +94,7 @@ export function DropZone({ onFilesAdded }: DropZoneProps) {
     setIsDragging(false)
   }, [])
 
-  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     setError(null)
     const files = e.target.files
     if (!files) return
@@ -94,21 +108,34 @@ export function DropZone({ onFilesAdded }: DropZoneProps) {
       return
     }
 
+    const validFiles = validateFiles(videoFiles)
+    if (validFiles.length === 0) return
+
+    setUploading(true)
     setAddingTask(true)
 
-    for (const file of videoFiles) {
-      addTask({
-        type: 'file',
-        source: file.path,
-        filename: file.name,
-        title: file.name.replace(/\.[^/.]+$/, ''),
-      })
+    try {
+      for (const file of validFiles) {
+        // 上传文件到后端
+        const { path } = await apiService.uploadFile(file)
+
+        addTask({
+          type: 'file',
+          source: path,
+          filename: file.name,
+          title: file.name.replace(/\.[^/.]+$/, ''),
+        })
+      }
+      onFilesAdded?.(validFiles)
+    } catch (err) {
+      setError(`上传失败: ${err instanceof Error ? err.message : '未知错误'}`)
+    } finally {
+      setUploading(false)
+      setAddingTask(false)
     }
 
-    setAddingTask(false)
-    onFilesAdded?.(Array.from(videoFiles))
     e.target.value = '' // 重置 input
-  }, [addTask, setAddingTask, onFilesAdded])
+  }, [addTask, setAddingTask, onFilesAdded, validateFiles])
 
   return (
     <div
@@ -116,12 +143,13 @@ export function DropZone({ onFilesAdded }: DropZoneProps) {
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       className={`
-        relative border-2 border-dashed rounded-xl p-8 text-center transition-all duration-200
+        relative border-2 border-dashed rounded-xl p-8 text-center transition-all duration-200 cursor-pointer
         ${
           isDragging
-            ? 'border-blue-500 bg-blue-50'
-            : 'border-gray-300 hover:border-gray-400 bg-gray-50'
+            ? 'border-neon-cyan bg-neon-cyan/10 shadow-neon-cyan'
+            : 'border-neon-cyan/30 hover:border-neon-cyan/50 bg-dark-card/50 backdrop-blur-xl'
         }
+        ${uploading ? 'opacity-50 pointer-events-none' : ''}
       `}
     >
       <input
@@ -129,24 +157,25 @@ export function DropZone({ onFilesAdded }: DropZoneProps) {
         accept="video/*"
         multiple
         onChange={handleFileSelect}
-        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+        disabled={uploading}
+        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
       />
 
       <div className="space-y-3 pointer-events-none">
-        <div className="text-5xl">📁</div>
+        <div className="text-5xl">{uploading ? '⏳' : '📁'}</div>
         <div>
-          <p className="text-lg font-medium text-gray-700">
-            拖拽视频文件到这里
+          <p className="text-lg font-heading font-medium text-text-primary">
+            {uploading ? '正在上传...' : '拖拽视频文件到这里'}
           </p>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-sm text-text-muted mt-1">
             或点击选择文件（支持 MP4、MOV、AVI 等格式，最大 2GB）
           </p>
         </div>
       </div>
 
       {error && (
-        <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-          <p className="text-sm text-red-600 whitespace-pre-line">{error}</p>
+        <div className="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+          <p className="text-sm text-red-400 whitespace-pre-line">{error}</p>
         </div>
       )}
     </div>

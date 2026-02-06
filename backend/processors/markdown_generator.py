@@ -68,7 +68,7 @@ class MarkdownGenerator:
             f'processed_at: "{datetime.now().isoformat()}"',
             "---",
             "",
-            f"# {metadata.get("title", "视频摘要")}",
+            f"# {metadata.get('title', '视频摘要')}",
             "",
             "## 📊 信息概览",
             "",

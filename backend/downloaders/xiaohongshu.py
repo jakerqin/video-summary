@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from typing import Optional
 from models.task import VideoInfo
-from downloaders.base import BaseDownloader
+from downloaders.base import BaseDownloader, downloader_registry
 from utils.logger import setup_logger
 
 logger = setup_logger()

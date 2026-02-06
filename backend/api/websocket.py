@@ -17,15 +17,25 @@ class ConnectionManager:
         self.active_connections.discard(websocket)
 
     async def send_message(self, message: Dict, websocket: WebSocket):
-        await websocket.send_text(json.dumps(message))
+        if websocket is None:
+            return
+        try:
+            await websocket.send_text(json.dumps(message))
+        except Exception:
+            self.disconnect(websocket)
 
     async def broadcast(self, message: Dict):
         """广播消息到所有连接"""
+        disconnected = set()
         for connection in self.active_connections:
             try:
                 await connection.send_text(json.dumps(message))
             except Exception:
-                pass
+                disconnected.add(connection)
+
+        # 清理断开的连接
+        for connection in disconnected:
+            self.disconnect(connection)
 
 
 manager = ConnectionManager()

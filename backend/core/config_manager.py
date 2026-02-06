@@ -42,7 +42,12 @@ class ConfigManager:
 
     def _get_config_path(self) -> Path:
         """获取配置文件路径"""
-        # 用户配置存储在应用数据目录
+        # 优先使用项目目录的配置文件
+        project_config = Path(__file__).parent.parent / "config.yaml"
+        if project_config.exists():
+            return project_config
+
+        # 否则使用用户配置目录
         config_dir = Path.home() / "Library" / "Application Support" / "VideoInsight"
         config_dir.mkdir(parents=True, exist_ok=True)
         return config_dir / "config.yaml"

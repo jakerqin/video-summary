@@ -1,10 +1,13 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from contextlib import asynccontextmanager
 import uvicorn
 import asyncio
 from typing import Optional
 import json
+import shutil
+from pathlib import Path
 
 from api.websocket import manager
 from core.config_manager import config_manager
@@ -12,10 +15,29 @@ from core.pipeline import process_video, pipeline
 from downloaders.xiaohongshu import get_video_info, XiaohongshuDownloader
 from models.task import TaskCreate, TaskType
 from utils.logger import setup_logger
+from processors.whisper_service import whisper_service
 
 logger = setup_logger()
 
-app = FastAPI(title="Video Insight API", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理"""
+    # 启动时执行
+    logger.info("Preloading Whisper model...")
+    try:
+        whisper_service.load_model()
+        logger.info("Whisper model preloaded successfully")
+    except Exception as e:
+        logger.warning(f"Failed to preload Whisper model: {e}")
+
+    yield
+
+    # 关闭时执行（如果需要清理资源）
+    logger.info("Shutting down...")
+
+
+app = FastAPI(title="Video Insight API", version="1.0.0", lifespan=lifespan)
 
 # CORS 配置
 app.add_middleware(
@@ -94,6 +116,26 @@ async def get_video_info(request: VideoInfoRequest):
     except Exception as e:
         logger.error(f"Failed to get video info: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/upload")
+async def upload_file(file: UploadFile = File(...)):
+    """上传视频文件"""
+    try:
+        # 创建临时上传目录
+        upload_dir = Path("./data/uploads")
+        upload_dir.mkdir(parents=True, exist_ok=True)
+
+        # 保存文件
+        file_path = upload_dir / file.filename
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        logger.info(f"File uploaded: {file_path}")
+        return {"path": str(file_path)}
+    except Exception as e:
+        logger.error(f"Failed to upload file: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/process")
@@ -191,6 +233,70 @@ async def websocket_endpoint(websocket: WebSocket):
                         websocket,
                     )
 
+                elif message_type == "start_processing":
+                    # 开始处理视频任务
+                    tasks = message.get("tasks", [])
+                    logger.info(f"Received start_processing request with {len(tasks)} tasks")
+
+                    for task_data in tasks:
+                        # 创建任务并异步处理
+                        task = TaskCreate(
+                            id=task_data.get("id"),
+                            type=TaskType(task_data.get("type")),
+                            source=task_data.get("source"),
+                            template_prompt=task_data.get("templatePrompt", ""),
+                            title=task_data.get("title"),
+                        )
+
+                        # 异步处理任务
+                        async def process_task(t):
+                            try:
+                                # 推送开始状态
+                                await manager.broadcast(
+                                    {
+                                        "type": "task_update",
+                                        "taskId": t.id,
+                                        "status": "processing",
+                                        "progress": 0,
+                                        "message": "开始处理...",
+                                    }
+                                )
+
+                                # 执行处理
+                                result = await process_video(t)
+
+                                # 推送完成状态
+                                await manager.broadcast(
+                                    {
+                                        "type": "task_update",
+                                        "taskId": t.id,
+                                        "status": "completed" if result["success"] else "failed",
+                                        "progress": 100 if result["success"] else 0,
+                                        "message": result.get("error") or "处理完成",
+                                        "outputPath": result.get("output_path"),
+                                    }
+                                )
+                            except Exception as e:
+                                logger.error(f"Task processing failed: {e}")
+                                await manager.broadcast(
+                                    {
+                                        "type": "task_update",
+                                        "taskId": t.id,
+                                        "status": "failed",
+                                        "progress": 0,
+                                        "message": str(e),
+                                    }
+                                )
+
+                        # 启动异步任务
+                        asyncio.create_task(process_task(task))
+
+                    # 确认收到
+                    await manager.send_message(
+                        {"type": "processing_started", "count": len(tasks)},
+                        websocket,
+                    )
+
                 else:
                     # 未知消息类型
                     await manager.send_message(
@@ -214,7 +320,7 @@ if __name__ == "__main__":
     uvicorn.run(
         app,
         host="127.0.0.1",
-        port=8000,
+        port=9000,
         log_level="info",
         reload=False,  # 生产环境设为 False
     )

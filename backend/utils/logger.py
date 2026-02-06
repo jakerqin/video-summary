@@ -6,6 +6,11 @@ import os
 def setup_logger(name: str = "video_insight") -> logging.Logger:
     """设置日志系统"""
     logger = logging.getLogger(name)
+
+    # 如果已经配置过，直接返回
+    if logger.handlers:
+        return logger
+
     logger.setLevel(logging.INFO)
 
     # 确保日志目录存在

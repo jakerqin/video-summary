@@ -9,9 +9,10 @@ whisper:
   device: "cpu"
 
 minimax:
-  api_key: ""  # 从环境变量或用户输入获取
-  model: "abab6.5s-chat"
+  api_key: "sk-"
+  model: "MiniMax-M2.1"
   max_tokens: 4096
+  base_url: "https://api.minimaxi.com/anthropic"
 
 templates:
   - name: "学习笔记"

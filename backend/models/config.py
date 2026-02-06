@@ -16,15 +16,19 @@ class AppConfig(BaseModel):
 
 
 class WhisperConfig(BaseModel):
+    model_config = {'protected_namespaces': ()}
+
     model_size: str = "base"
     language: str = "zh"
     device: str = "cpu"
+    cache_dir: Optional[str] = None  # 自定义缓存目录，默认使用 ~/.cache/whisper
 
 
 class MiniMaxConfig(BaseModel):
     api_key: str = ""
     model: str = "abab6.5s-chat"
     max_tokens: int = 4096
+    base_url: str = "https://api.minimaxi.com/anthropic"
 
 
 class DownloaderConfig(BaseModel):

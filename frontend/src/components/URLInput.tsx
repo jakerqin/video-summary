@@ -93,7 +93,7 @@ export function URLInput({ onSubmit }: URLInputProps) {
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-sm font-heading font-medium text-text-primary mb-2">
           或粘贴视频链接
         </label>
         <div className="flex space-x-3">
@@ -105,16 +105,16 @@ export function URLInput({ onSubmit }: URLInputProps) {
               onPaste={handlePaste}
               placeholder="https://xiaohongshu.com/..."
               className={`
-                w-full px-4 py-3 border rounded-xl transition-colors
+                w-full px-4 py-3 bg-dark-surface/50 backdrop-blur-xl border rounded-lg transition-all font-body
                 ${
                   isValid
-                    ? 'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
-                    : 'border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-200'
+                    ? 'border-neon-cyan/30 focus:border-neon-cyan focus:ring-2 focus:ring-neon-cyan/20 text-text-primary'
+                    : 'border-red-500/30 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 text-red-400'
                 }
               `}
             />
             {!isValid && (
-              <p className="mt-1 text-sm text-red-500">
+              <p className="mt-1 text-sm text-red-400">
                 请输入有效的视频链接（支持小红书、抖音、B站）
               </p>
             )}
@@ -122,14 +122,14 @@ export function URLInput({ onSubmit }: URLInputProps) {
           <button
             type="submit"
             disabled={!url.trim() || addingTask}
-            className="px-6 py-3 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 text-white font-medium rounded-xl transition-colors"
+            className="px-6 py-3 bg-neon-cyan/20 hover:bg-neon-cyan/30 disabled:bg-dark-surface/30 text-neon-cyan disabled:text-text-muted font-heading font-medium rounded-lg transition-all border border-neon-cyan/30 disabled:border-transparent shadow-neon-cyan disabled:shadow-none"
           >
             添加
           </button>
         </div>
       </div>
 
-      <div className="flex items-center space-x-4 text-xs text-gray-500">
+      <div className="flex items-center space-x-4 text-xs text-text-muted">
         <span className="flex items-center">
           <span className="mr-1">📕</span> 小红书
         </span>

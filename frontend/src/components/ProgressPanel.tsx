@@ -3,6 +3,7 @@ import { useSettingsStore } from '../stores/settings'
 import { useEffect, useState } from 'react'
 import { wsService } from '../services/websocket'
 import { ExportPanel } from './ExportPanel'
+import { useToast } from '../hooks/useToast'
 
 export function ProgressPanel() {
   const { tasks, updateTask } = useQueueStore()
@@ -10,6 +11,7 @@ export function ProgressPanel() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [logs, setLogs] = useState<string[]>([])
   const [completedTask, setCompletedTask] = useState<{ id: string; outputPath: string } | null>(null)
+  const toast = useToast()
 
   // 获取进行中的任务
   const pendingTasks = tasks.filter((t) => t.status === 'pending')
@@ -59,16 +61,12 @@ export function ProgressPanel() {
   }, [updateTask])
 
   const handleStartProcessing = async () => {
-    if (!settings.minimaxApiKey) {
-      alert('请先在设置中配置 MiniMax API Key')
-      return
-    }
-
     const activeTasks = tasks.filter((t) =>
       ['pending', 'downloading', 'processing'].includes(t.status)
     )
 
     if (activeTasks.length === 0) {
+      toast.warning('没有待处理的任务')
       return
     }
 
@@ -185,6 +183,9 @@ export function ProgressPanel() {
           onClose={() => setCompletedTask(null)}
         />
       )}
+
+      {/* Toast 容器 */}
+      <toast.ToastContainer />
     </div>
   )
 }

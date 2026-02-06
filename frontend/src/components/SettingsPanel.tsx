@@ -1,15 +1,29 @@
 import { useState } from 'react'
 import { useSettingsStore } from '../stores/settings'
-import { ipcService } from '../services/ipc'
+import { apiService } from '../services/api'
 
 export function SettingsPanel() {
   const { settings, updateSettings } = useSettingsStore()
   const [showApiKey, setShowApiKey] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState<string | null>(null)
   const [editingPrompt, setEditingPrompt] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saveMessage, setSaveMessage] = useState('')
 
   const handleSaveApiKey = async () => {
-    updateSettings({ minimaxApiKey: settings.minimaxApiKey })
+    setSaving(true)
+    setSaveMessage('')
+    try {
+      await apiService.setApiKey(settings.minimaxApiKey)
+      updateSettings({ minimaxApiKey: settings.minimaxApiKey })
+      setSaveMessage('✓ API Key 已保存')
+      setTimeout(() => setSaveMessage(''), 3000)
+    } catch (error) {
+      setSaveMessage('✗ 保存失败')
+      console.error('Failed to save API key:', error)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleEditTemplate = (templateId: string, currentPrompt: string) => {
@@ -26,17 +40,6 @@ export function SettingsPanel() {
       })
       setEditingTemplate(null)
       setEditingPrompt('')
-    }
-  }
-
-  const handleSelectDirectory = async () => {
-    try {
-      const result = await ipcService.openDirectory('')
-      if (result.filePaths && result.filePaths[0]) {
-        updateSettings({ outputDirectory: result.filePaths[0] })
-      }
-    } catch (error) {
-      console.error('Failed to open directory:', error)
     }
   }
 
@@ -74,11 +77,17 @@ export function SettingsPanel() {
               </div>
               <button
                 onClick={handleSaveApiKey}
-                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl transition-colors"
+                disabled={saving}
+                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 text-white rounded-xl transition-colors"
               >
-                保存
+                {saving ? '保存中...' : '保存'}
               </button>
             </div>
+            {saveMessage && (
+              <p className={`mt-2 text-sm ${saveMessage.startsWith('✓') ? 'text-green-600' : 'text-red-600'}`}>
+                {saveMessage}
+              </p>
+            )}
             <p className="mt-2 text-xs text-gray-500">
               请前往{" "}
               <a
@@ -105,26 +114,20 @@ export function SettingsPanel() {
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Markdown 保存目录
           </label>
-          <div className="flex space-x-3">
-            <div className="flex-1 relative">
-              <input
-                type="text"
-                value={settings.outputDirectory}
-                onChange={(e) =>
-                  updateSettings({ outputDirectory: e.target.value })
-                }
-                placeholder="~/Documents/VideoInsight"
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-200 focus:border-blue-500"
-                readOnly
-              />
-            </div>
-            <button
-              onClick={handleSelectDirectory}
-              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition-colors"
-            >
-              浏览
-            </button>
+          <div className="flex-1 relative">
+            <input
+              type="text"
+              value={settings.outputDirectory}
+              onChange={(e) =>
+                updateSettings({ outputDirectory: e.target.value })
+              }
+              placeholder="./data/output"
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-200 focus:border-blue-500"
+            />
           </div>
+          <p className="mt-2 text-xs text-gray-500">
+            输出目录由后端配置文件控制，此处仅供显示
+          </p>
         </div>
       </div>
 
