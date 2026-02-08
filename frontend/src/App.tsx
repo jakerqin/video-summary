@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAppStore } from './stores/app'
 import { useQueueStore } from './stores/queue'
-import { useSettingsStore } from './stores/settings'
 import { wsService } from './services/websocket'
 import { DropZone } from './components/DropZone'
 import { URLInput } from './components/URLInput'
@@ -15,7 +14,6 @@ type TabType = 'input' | 'queue' | 'settings'
 function App() {
   const { connected, setConnected } = useAppStore()
   const { tasks } = useQueueStore()
-  const { settings } = useSettingsStore()
   const [activeTab, setActiveTab] = useState<TabType>('input')
   const [sidebarOpen, setSidebarOpen] = useState(true)
 

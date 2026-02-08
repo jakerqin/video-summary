@@ -20,13 +20,19 @@ export function ProcessingQueue({ onClear }: ProcessingQueueProps) {
   // 监听 WebSocket 消息更新进度
   useEffect(() => {
     const handleProgress = (data: any) => {
-      if (data.taskId && data.status) {
-        updateTask(data.taskId, {
-          status: data.status,
-          progress: data.progress || 0,
-          message: data.message || STATUS_CONFIG[data.status]?.text || '',
-        })
+      const taskId = data.taskId || data.task_id
+      const status = data.status as TaskStatus | undefined
+      if (!taskId || !status) {
+        return
       }
+
+      updateTask(taskId, {
+        status,
+        progress: data.progress || 0,
+        message: data.message || STATUS_CONFIG[status]?.text || '',
+        outputPath: data.outputPath || data.output_path,
+        error: status === 'failed' ? data.message : undefined,
+      })
     }
 
     wsService.on('progress', handleProgress)

@@ -13,6 +13,8 @@ export interface Task {
   message: string
   createdAt: Date
   error?: string
+  outputPath?: string
+  summary?: string
 }
 
 interface QueueState {
@@ -26,7 +28,7 @@ interface QueueState {
   setAddingTask: (adding: boolean) => void
 }
 
-export const useQueueStore = create<QueueState>((set, get) => ({
+export const useQueueStore = create<QueueState>((set) => ({
   tasks: [],
   addingTask: false,
 

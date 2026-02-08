@@ -5,7 +5,7 @@
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:9000'
 
-interface ApiResponse<T = any> {
+interface ApiResponse<T = unknown> {
   success: boolean
   data?: T
   error?: string
@@ -28,6 +28,15 @@ interface Template {
 interface Config {
   templates: Template[]
   output_directory: string
+}
+
+interface ExportMarkdownParams {
+  task_id: string
+  type: 'file' | 'url'
+  source: string
+  summary: string
+  title?: string
+  metadata?: Record<string, string>
 }
 
 class ApiService {
@@ -121,6 +130,26 @@ class ApiService {
   }
 
   /**
+   * 导出 Markdown
+   */
+  async exportMarkdown(params: ExportMarkdownParams): Promise<ApiResponse<{ output_path: string }>> {
+    const response = await fetch(`${this.baseUrl}/markdown/export`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(params),
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || 'Failed to export markdown')
+    }
+
+    return response.json()
+  }
+
+  /**
    * 上传文件
    */
   async uploadFile(file: File): Promise<{ path: string }> {
@@ -140,8 +169,6 @@ class ApiService {
   }
 }
 
-// 导出单例
 export const apiService = new ApiService()
 
-// 导出类型
-export type { ApiResponse, VideoInfo, Template, Config }
+export type { ApiResponse, VideoInfo, Template, Config, ExportMarkdownParams }

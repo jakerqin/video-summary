@@ -4,9 +4,9 @@ app:
   output_dir: "~/Documents/VideoInsight"
 
 whisper:
-  model_size: "base"  # tiny, base, small, medium, large
+  model_size: "small"  # tiny, base, small, medium, large
   language: "zh"
-  device: "cpu"
+  device: "auto"  # auto, cpu, mps
 
 minimax:
   api_key: "sk-"

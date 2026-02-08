@@ -12,7 +12,7 @@ export function CustomPromptEditor({
   onCancel,
   editTemplate,
 }: CustomPromptEditorProps) {
-  const { addTemplate, updateTemplate, removeTemplate, settings } = useSettingsStore()
+  const { addTemplate, updateTemplate } = useSettingsStore()
 
   const [name, setName] = useState(editTemplate?.name || '')
   const [prompt, setPrompt] = useState(editTemplate?.prompt || '')
@@ -105,7 +105,7 @@ export function CustomPromptEditor({
                 onClick={() => insertVariable('{text}')}
                 className="text-xs px-2 py-1 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition"
               >
-                + {text}
+                + {'{text}'}
               </button>
             </div>
           </div>

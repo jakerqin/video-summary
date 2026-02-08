@@ -1,6 +1,7 @@
 import os
 import subprocess
 import asyncio
+import time
 from pathlib import Path
 from typing import Optional, Callable
 from utils.logger import setup_logger
@@ -17,15 +18,50 @@ class WhisperService:
         self._model_size = "base"
         self._device = None
         self._backend = None  # 'faster-whisper' 或 'openai-whisper'
+        self._project_root = Path(__file__).resolve().parent.parent
         self._temp_dir = Path("/tmp/video_insight_audio")
         self._temp_dir.mkdir(parents=True, exist_ok=True)
 
-    def _detect_device(self) -> tuple[str, str]:
+    def _detect_device(self, preferred_device: str = "auto") -> tuple[str, str]:
         """检测最佳设备和后端
 
         Returns:
             (device, backend) 元组
         """
+        forced_backend = os.getenv("WHISPER_BACKEND", "").strip().lower()
+        if forced_backend in {"openai-whisper", "faster-whisper"}:
+            if forced_backend == "openai-whisper":
+                try:
+                    import torch
+                    if torch.backends.mps.is_available():
+                        logger.info("Using forced backend: openai-whisper on mps")
+                        return "mps", "openai-whisper"
+                except Exception as e:
+                    logger.warning(f"Forced openai-whisper backend failed to detect MPS: {e}")
+
+                logger.info("Using forced backend: openai-whisper on cpu")
+                return "cpu", "openai-whisper"
+
+            logger.info("Using forced backend: faster-whisper on cpu")
+            return "cpu", "faster-whisper"
+
+        preferred = (preferred_device or "auto").strip().lower()
+        if preferred == "cpu":
+            logger.info("Using configured device: cpu with faster-whisper")
+            return "cpu", "faster-whisper"
+
+        if preferred in {"mps", "metal", "gpu"}:
+            try:
+                import torch
+                if torch.backends.mps.is_available():
+                    logger.info("Using configured device: mps with openai-whisper")
+                    return "mps", "openai-whisper"
+            except Exception as e:
+                logger.warning(f"Configured mps device is unavailable: {e}")
+
+            logger.info("Falling back to cpu with faster-whisper")
+            return "cpu", "faster-whisper"
+
         try:
             import torch
             if torch.backends.mps.is_available():
@@ -46,7 +82,7 @@ class WhisperService:
         model_size = config.whisper.model_size if not model_size else model_size
 
         # 检测设备
-        device, backend = self._detect_device()
+        device, backend = self._detect_device(config.whisper.device)
         self._device = device
         self._backend = backend
 
@@ -54,11 +90,15 @@ class WhisperService:
 
         # 模型缓存目录
         if config.whisper.cache_dir:
-            cache_dir = Path(config.whisper.cache_dir).expanduser().resolve()
+            cache_dir = Path(config.whisper.cache_dir).expanduser()
+            if not cache_dir.is_absolute():
+                cache_dir = self._project_root / cache_dir
+            cache_dir = cache_dir.resolve()
         else:
             cache_dir = Path.home() / ".cache" / "whisper"
 
         cache_dir.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Using cache directory: {cache_dir}")
 
         if backend == "openai-whisper":
             self._load_openai_whisper(model_size, device, cache_dir)
@@ -92,14 +132,46 @@ class WhisperService:
         """加载 Faster Whisper（CPU 优化）"""
         from faster_whisper import WhisperModel
 
+        cpu_threads = max(4, min(12, os.cpu_count() or 8))
+        num_workers = max(2, cpu_threads // 2)
+
         self._model = WhisperModel(
             model_size,
             device="cpu",
             compute_type="int8",
             download_root=str(cache_dir),
-            cpu_threads=8,
-            num_workers=4,
+            cpu_threads=cpu_threads,
+            num_workers=num_workers,
         )
+
+    def _get_openai_decode_options(self) -> dict:
+        """获取 OpenAI Whisper 解码参数（优先速度）。"""
+        perf_mode = os.getenv("WHISPER_PERF_MODE", "fast").strip().lower()
+
+        if perf_mode == "quality":
+            beam_size = 5
+            condition_on_previous_text = True
+        elif perf_mode == "balanced":
+            beam_size = 2
+            condition_on_previous_text = False
+        else:
+            beam_size = 1
+            condition_on_previous_text = False
+
+        beam_size = int(os.getenv("WHISPER_BEAM_SIZE", beam_size))
+        condition_env = os.getenv("WHISPER_CONDITION_PREV", "")
+        if condition_env:
+            condition_on_previous_text = condition_env.lower() in {"1", "true", "yes"}
+
+        return {
+            "beam_size": beam_size,
+            "best_of": 1,
+            "temperature": 0.0,
+            "compression_ratio_threshold": 2.4,
+            "no_speech_threshold": 0.6,
+            "condition_on_previous_text": condition_on_previous_text,
+            "fp16": self._device == "mps",
+        }
 
     def is_model_loaded(self) -> bool:
         """检查模型是否已加载"""
@@ -135,26 +207,42 @@ class WhisperService:
         if progress_callback:
             progress_callback(10, "开始识别...")
 
+        decode_options = self._get_openai_decode_options()
+        logger.info(
+            "OpenAI Whisper decode options: beam_size=%s, condition_on_previous_text=%s, fp16=%s",
+            decode_options["beam_size"],
+            decode_options["condition_on_previous_text"],
+            decode_options["fp16"],
+        )
+
+        start_time = time.perf_counter()
+
         # 转录参数
         with torch.no_grad():
             result = self._model.transcribe(
                 audio_path,
                 language=language,
-                beam_size=5,  # 优化速度
-                best_of=1,
-                temperature=0.0,
-                compression_ratio_threshold=2.4,
-                no_speech_threshold=0.6,
-                condition_on_previous_text=True,
-                fp16=(self._device == "mps"),  # Metal 使用 FP16
+                **decode_options,
             )
 
         full_text = result["text"].strip()
+        elapsed = time.perf_counter() - start_time
+        segments = result.get("segments") or []
+        audio_duration = 0.0
+        if segments:
+            audio_duration = float(segments[-1].get("end", 0.0) or 0.0)
+        rtf = elapsed / audio_duration if audio_duration > 0 else 0.0
 
         if progress_callback:
             progress_callback(100, "识别完成")
 
-        logger.info(f"Transcription complete: {len(full_text)} characters")
+        logger.info(
+            "Transcription complete: %s characters, elapsed=%.2fs, audio=%.2fs, rtf=%.2f",
+            len(full_text),
+            elapsed,
+            audio_duration,
+            rtf,
+        )
         return full_text
 
     def _transcribe_faster(
@@ -166,6 +254,8 @@ class WhisperService:
         """使用 Faster Whisper 转录（CPU 优化）"""
         if progress_callback:
             progress_callback(10, "开始识别...")
+
+        start_time = time.perf_counter()
 
         # 转录参数
         segments, info = self._model.transcribe(
@@ -196,11 +286,20 @@ class WhisperService:
                     progress_callback(progress, f"正在识别: {segment.text[:20]}...")
 
         full_text = " ".join(texts).strip()
+        elapsed = time.perf_counter() - start_time
+        rtf = elapsed / total_duration if total_duration > 0 else 0.0
 
         if progress_callback:
             progress_callback(100, "识别完成")
-
-        logger.info(f"Transcription complete: {len(full_text)} characters")
+        
+        logger.info(f"Transcription complete: full_text: {full_text}")
+        logger.info(
+            "Transcription complete: %s characters, elapsed=%.2fs, audio=%.2fs, rtf=%.2f",
+            len(full_text),
+            elapsed,
+            total_duration,
+            rtf,
+        )
         return full_text
 
     def transcribe_video(

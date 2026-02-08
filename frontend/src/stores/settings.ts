@@ -13,6 +13,7 @@ export interface Settings {
   outputDirectory: string
   whisperModel: 'tiny' | 'base' | 'small' | 'medium'
   templates: Template[]
+  selectedTemplateId: string
 }
 
 interface SettingsState {
@@ -57,11 +58,12 @@ const defaultSettings: Settings = {
   outputDirectory: '~/Documents/VideoInsight',
   whisperModel: 'base',
   templates: defaultTemplates,
+  selectedTemplateId: defaultTemplates[0].id,
 }
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       settings: defaultSettings,
 
       updateSettings: (updates) => {
@@ -111,6 +113,7 @@ export const useSettingsStore = create<SettingsState>()(
           outputDirectory: state.settings.outputDirectory,
           whisperModel: state.settings.whisperModel,
           templates: state.settings.templates,
+          selectedTemplateId: state.settings.selectedTemplateId,
         },
       }),
     }

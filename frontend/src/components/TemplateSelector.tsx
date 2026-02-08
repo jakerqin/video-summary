@@ -1,22 +1,21 @@
 import { useState } from 'react'
-import { useSettingsStore, Template } from '../stores/settings'
+
 import { CustomPromptEditor } from './CustomPromptEditor'
+import { useSettingsStore, Template } from '../stores/settings'
 
 export function TemplateSelector() {
   const { settings, updateSettings } = useSettingsStore()
-  const [selectedId, setSelectedId] = useState(settings.templates[0]?.id || '')
   const [showPreview, setShowPreview] = useState(false)
   const [previewTemplate, setPreviewTemplate] = useState<Template | null>(null)
   const [showEditor, setShowEditor] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null)
 
-  const selectedTemplate = settings.templates.find((t) => t.id === selectedId)
+  const selectedTemplate = settings.templates.find(
+    (t) => t.id === settings.selectedTemplateId
+  )
 
   const handleSelect = (id: string) => {
-    setSelectedId(id)
-    updateSettings({
-      // 这里可以保存用户上次选择的模板
-    })
+    updateSettings({ selectedTemplateId: id })
   }
 
   const handlePreview = (template: Template) => {
@@ -34,7 +33,7 @@ export function TemplateSelector() {
     setShowEditor(true)
   }
 
-  const handleSaveTemplate = (templateData: Omit<Template, 'id' | 'isCustom'>) => {
+  const handleSaveTemplate = () => {
     setShowEditor(false)
     setEditingTemplate(null)
   }
@@ -46,27 +45,24 @@ export function TemplateSelector() {
 
   const handleDeleteTemplate = (id: string) => {
     if (confirm('确定要删除这个模板吗？')) {
+      const nextTemplates = settings.templates.filter((t) => t.id !== id)
+      const fallbackTemplateId = nextTemplates[0]?.id || ''
+
       updateSettings({
-        templates: settings.templates.filter((t) => t.id !== id),
+        templates: nextTemplates,
+        selectedTemplateId:
+          settings.selectedTemplateId === id ? fallbackTemplateId : settings.selectedTemplateId,
       })
-      // 如果删除的是当前选中的模板，重置选择
-      if (selectedId === id) {
-        setSelectedId(settings.templates[0]?.id || '')
-      }
     }
   }
 
-  // 预设模板和自定义模板分组
   const presetTemplates = settings.templates.filter((t) => !t.isCustom)
   const customTemplates = settings.templates.filter((t) => t.isCustom)
 
   return (
     <div className="space-y-6">
-      {/* 标题和操作 */}
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-gray-700">
-          选择摘要模板
-        </h3>
+        <h3 className="text-sm font-medium text-gray-700">选择摘要模板</h3>
         <button
           onClick={handleCreateTemplate}
           className="text-sm text-blue-600 hover:text-blue-700 flex items-center space-x-1"
@@ -76,7 +72,6 @@ export function TemplateSelector() {
         </button>
       </div>
 
-      {/* 自定义模板编辑器 */}
       {showEditor && (
         <CustomPromptEditor
           editTemplate={editingTemplate || undefined}
@@ -85,7 +80,6 @@ export function TemplateSelector() {
         />
       )}
 
-      {/* 预设模板 */}
       {presetTemplates.length > 0 && (
         <div>
           <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">
@@ -96,7 +90,7 @@ export function TemplateSelector() {
               <TemplateCard
                 key={template.id}
                 template={template}
-                isSelected={selectedId === template.id}
+                isSelected={settings.selectedTemplateId === template.id}
                 onSelect={() => handleSelect(template.id)}
                 onPreview={() => handlePreview(template)}
               />
@@ -105,7 +99,6 @@ export function TemplateSelector() {
         </div>
       )}
 
-      {/* 自定义模板 */}
       {customTemplates.length > 0 && (
         <div>
           <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">
@@ -116,19 +109,18 @@ export function TemplateSelector() {
               <TemplateCard
                 key={template.id}
                 template={template}
-                isSelected={selectedId === template.id}
+                isSelected={settings.selectedTemplateId === template.id}
                 onSelect={() => handleSelect(template.id)}
                 onPreview={() => handlePreview(template)}
                 onEdit={() => handleEditTemplate(template)}
                 onDelete={() => handleDeleteTemplate(template.id)}
-                showActions={true}
+                showActions
               />
             ))}
           </div>
         </div>
       )}
 
-      {/* 当前选择提示 */}
       {selectedTemplate && (
         <div className="p-3 bg-blue-50 rounded-lg">
           <p className="text-sm text-blue-800">
@@ -138,7 +130,6 @@ export function TemplateSelector() {
         </div>
       )}
 
-      {/* 预览模态框 */}
       {showPreview && previewTemplate && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden">
@@ -176,7 +167,7 @@ export function TemplateSelector() {
                 </button>
                 <button
                   onClick={() => {
-                    setSelectedId(previewTemplate.id)
+                    updateSettings({ selectedTemplateId: previewTemplate.id })
                     setShowPreview(false)
                   }}
                   className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl transition-colors"
@@ -192,7 +183,6 @@ export function TemplateSelector() {
   )
 }
 
-// 模板卡片组件
 interface TemplateCardProps {
   template: Template
   isSelected: boolean
@@ -225,7 +215,6 @@ function TemplateCard({
         }
       `}
     >
-      {/* 选中标识 */}
       {isSelected && (
         <div className="absolute top-2 right-2 w-2 h-2 bg-blue-500 rounded-full" />
       )}
@@ -237,7 +226,6 @@ function TemplateCard({
         {template.prompt.substring(0, 60)}...
       </p>
 
-      {/* 操作按钮（悬停时显示） */}
       {showActions && (
         <div className="absolute bottom-2 right-2 flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
           <button
